@@ -1,0 +1,2 @@
+# Exploratory-Data-Analysis-and-Visualization-of-the-Policing-Dataset-in-Colchester-2023-
+Comprehensive analysis of the Colchester Policing dataset (2023) using R. Includes exploratory data analysis, statistical summaries, and visualizations to uncover policing patterns, trends, and anomalies. This project provides actionable insights into community safety and policing effectiveness through advanced data visualization techniques.
