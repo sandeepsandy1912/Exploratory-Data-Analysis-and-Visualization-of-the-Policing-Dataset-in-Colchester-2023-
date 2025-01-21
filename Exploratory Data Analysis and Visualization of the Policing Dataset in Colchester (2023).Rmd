@@ -1,0 +1,313 @@
+---
+title: "MA304:Exploratory Data Analysis and Data Visualisation Of Policing Dataset From Colchester 2023"
+author: "MA304_2310514"
+output:
+  html_document: default
+  word_document: default
+date: "2024-04-24"
+---
+
+
+
+# Introduction
+                                                  
+In 2023, Colchester presents a unique canvas where the dynamics of crime and weather converge. Our assignment harnesses this merged dataset to not only analyze trends but also visualize the subtle interplay between environmental factors and criminal activities. Through sophisticated data visualization techniques, we aim to reveal patterns that may influence local safety and quality of life. This analysis will serve as a crucial tool for community stakeholders, enabling informed decisions and proactive measures. Prepare for a visual exploration that offers more than just data, but a deeper understanding of how weather can shape urban safety.
+
+## Exploring Crime Dynamics and Weather in Colchester, 2023.
+
+The report centers on a merged dataset combining crime and weather data from Colchester for the year 2023, with a focus on exploring potential relationships between environmental conditions and criminal activities. This dataset, compiled without further cleaning, aligns crime incidents with corresponding daily weather conditions by date, facilitating direct analysis. Various visualizations such as line graphs, bar charts, and scatter plots have been employed to illustrate trends and patterns across the data. Initial visual assessments suggest intriguing interactions between specific weather conditions and fluctuations in crime rates. This exploratory analysis aims to offer preliminary insights and stimulate more in-depth statistical examination and predictive modeling in future work. The visual evidence provided could serve as a valuable resource for local authorities and community safety organizations in understanding and potentially mitigating crime influenced by environmental factors.
+
+
+```{r,warning=FALSE,fig.align='center'}
+knitr::opts_chunk$set
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+library(leaflet)
+library(corrplot)
+library(plotly)
+library(knitr)
+library(kableExtra)
+
+
+# Read the data
+crime_data <- read.csv("crime23.csv")
+temp_data <- read.csv("temp2023.csv")
+
+# Display the structure of the temp_data dataframe
+str(temp_data)
+
+# Modify the 'Date' column in temp_data to extract only the year and month
+temp_data$Date <- substr(temp_data$Date, start = 1, stop = 7)
+
+# Rename the 'Date' column to 'date' in temp_data
+colnames(temp_data)[which(names(temp_data) == "Date")] <- "date"
+
+# Remove columns 'WindkmhDir', 'PreselevHp', 'SnowDepcm' from temp_data
+temp_data <- temp_data[,-which(names(temp_data)=="WindkmhDir")]
+temp_data <- temp_data[,-which(names(temp_data)=="PreselevHp")]
+temp_data <- temp_data[,-which(names(temp_data)=="SnowDepcm")]
+
+# Group temp_data by 'date' and calculate the mean of numeric columns
+red_temp_data <- temp_data %>% 
+  group_by(date) %>% 
+  summarise(across(where(is.numeric), ~mean(.x, na.rm=TRUE)))
+
+# Merge crime_data and red_temp_data based on the 'date' column
+merged_data <- merge(x = crime_data, y = red_temp_data, by = "date", all.x = TRUE)
+
+
+```
+## Visualising the data
+
+```{r,warning=FALSE,fig.align='center'}
+# Create a two-way table of categories by month
+two_waytable_month_category <- table(merged_data$category, merged_data$date)
+
+# Display the table with borders using kable
+kable(two_waytable_month_category, format = "html", caption = "Two-way Table of Crime Categories by Month") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "bordered"))
+
+
+```
+The two-way table provides a monthly breakdown of different crime categories reported in Colchester during 2023. Each cell in the table indicates the number of incidents for a specific crime type in a given month, with rows for crime types and columns for months. Notable fluctuations can be observed across the months for various crimes, suggesting potential seasonal or temporal patterns in criminal activity.
+
+```{r,warning=FALSE,fig.align='center'}
+# Summarize data to get counts of incidents by category
+incident_counts <- merged_data %>%
+  group_by(category, outcome_status) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  arrange(category, outcome_status)
+
+# Create a stacked bar plot using ggplot2
+bar_plot <- ggplot(incident_counts, aes(x = category, y = count, fill = outcome_status)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(title = "Count of Incidents by Category",
+       x = "Category",
+       y = "Count of Incidents") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Print the interactive bar plot
+interactive_barplot <- ggplotly(bar_plot)
+interactive_barplot
+```
+This interactive bar plot categorizes the counts of incidents in Colchester, segmented by outcomes. The interactivity likely allows viewers to hover over or click on segments to reveal specific data points or percentages, facilitating a detailed analysis of outcomes for each crime category. Such interactive elements enhance engagement and understanding by allowing users to explore and focus on particular areas of interest within the dataset.
+
+```{r,warning=FALSE,fig.align='center'}
+# Summarize data to get counts of incidents by date and average temperature
+daily_data <- merged_data %>%
+  group_by(date) %>%
+  summarise(crime_count = n(),
+            Avg_Temperature = mean(TemperatureCAvg, na.rm = TRUE))
+
+# Create a 2D density plot using ggplot2 with the legend on the right
+twoD_density_plot <- ggplot(daily_data, aes(x = Avg_Temperature, y = crime_count)) +
+  geom_density_2d_filled() +
+  labs(title = "Density of Crime Incidents and Temperature",
+       x = "Average Daily Temperature (\u00B0C)",
+       y = "Daily Crime Frequency") +
+  theme_minimal() +
+  theme(legend.position = "right") 
+
+# Print the plot
+twoD_density_plot
+
+```
+The density plot visualizes the relationship between average daily temperature and daily crime frequency. Contours of different colors indicate the density levels of crime incidents, with warmer colors representing higher densities. The most pronounced density peak occurs at moderate temperatures, suggesting a potential correlation where crime frequency increases with temperature to a certain point. This graphic tool is useful for identifying trends and potential hotspots where temperature and crime incidents converge most frequently.
+
+```{r,warning=FALSE,fig.align='center'}
+# Histogram
+histogram_plot <- ggplot(data = merged_data, aes(x = category, fill = category)) +
+  geom_histogram(stat = "count", color = "black", bins = 30) +  
+  labs(x = "Crime Category", y = "Number of Incidents", title = "Distribution of Crime Incidents by Category") +
+  theme_minimal() +
+  theme(legend.position = "right") + 
+  guides(fill = guide_legend(title = "Category"))  
+
+# Rotate x-axis labels for better readability
+histogram_plot <- histogram_plot + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Convert the ggplot to an interactive plot using plotly
+interactive_histogram_plot <- ggplotly(histogram_plot)
+
+# Print the interactive plot
+print(interactive_histogram_plot)
+```
+
+The interactive histogram shows the number of crimes by type, with color-coded segments indicating outcomes. The interactive features allow users to discover specific data for each segment, enhancing the ability to analyze the distribution of crime resolutions within each category.
+
+```{r,warning=FALSE,fig.align='center'}
+# Create a violin plot to show temperature distribution by category
+violin_plot <- ggplot(merged_data, aes(x = category, y = TemperatureCAvg, fill = category)) +
+  geom_violin(trim = FALSE) +
+  labs(title = "Distribution of Average Temperature Across Incident Categories",
+       x = "Incident Category",
+       y = "Average Temperature (Celsius)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 40, hjust = 1))
+
+# Print the plot
+print(violin_plot)
+
+```
+The violin plot depicts the distribution of average temperatures at which various crime incidents occur. Each 'violin' represents a different crime category, with its width indicating the frequency of incidents at various temperatures. Wider sections mean more incidents occurred at that temperature, while narrower sections indicate fewer incidents. This visualization allows us to compare temperature distributions across crimes, identifying any patterns or anomalies, such as certain crimes occurring more frequently at higher or lower temperatures.
+
+```{r,warning=FALSE,fig.align='center'}
+# Preparing the data
+crime_data <- merged_data %>%
+  filter(category %in% c("theft", "burglary", "assault", "drug-related", "vandalism"))  
+
+# Create the violin plot
+single_violin_plot <- ggplot(crime_data, aes(x = category, y = TemperatureCAvg, fill = category)) +
+  geom_violin(trim = FALSE) +
+  labs(title = "Distribution of Crime Types Across Average Daily Temperatures",
+       x = "Crime Category",
+       y = "Average Daily Temperature (\u00B0C)") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set3")
+
+# Print the plot
+single_violin_plot
+
+```
+The single violin plot illustrates the distribution of average daily temperatures at which burglary incidents are reported. The shape of the violin indicates the probability density of the data at different temperatures, with the thickest part representing the temperature range with the highest frequency of burglaries. The plot suggests a variation in the occurrence of burglary with changes in temperature, providing insights into potential correlations between temperature and the likelihood of this crime category.
+
+```{r,warning=FALSE,fig.align='center'}
+# Calculate precipitation counts
+precipitation_counts <- merged_data %>%
+  group_by(Precmm) %>%
+  summarise(count = n())
+
+# Create scatter plot of precipitation vs. crime counts
+scatter_plot <- ggplot(precipitation_counts, aes(x = Precmm, y = count, color = Precmm)) +
+  geom_point(alpha = 0.8) +
+  labs(title = "Precipitation vs. Crime Counts", x = "Precipitation (mm)", y = "Crime Counts") +
+  scale_color_gradient(low = "blue", high = "red")  # Adjust color gradient if needed
+
+# Print the plot
+scatter_plot
+
+```
+The scatter plot illustrates the relationship between precipitation levels (in millimeters) and crime counts. Each point represents the crime count on a day with the corresponding precipitation level, with the color intensity reflecting the amount of precipitation. A gradient from blue to red indicates increasing rainfall. The plot allows for the observation of trends or patterns in crime incidence on days with varying amounts of rainfall, potentially revealing whether precipitation has an impact on crime occurrence.
+
+```{r,warning=FALSE,fig.align='center'}
+# Select only the numeric columns and remove those with zero variance
+numeric_data <- merged_data %>%
+  select_if(is.numeric) %>%
+  select_if(function(col) sd(col, na.rm = TRUE) != 0)
+
+# Calculate the correlation matrix for the cleaned data
+cor_matrix <- cor(numeric_data, use = "pairwise.complete.obs") 
+
+# Visualize the correlation matrix using corrplot
+correl_plot <- corrplot(cor_matrix, method = "circle",
+         type = "upper", order = "hclust",
+         tl.col = "black", tl.srt = 45, tl.cex = 0.8,  # Text label size and rotation
+         number.cex = 0.7,  # Correlation coefficient text size
+         col = colorRampPalette(c("#BB5566", "white", "#4477AA"))(200))
+
+# Print the plot
+correl_plot
+
+```
+The visualization is a correlation matrix, depicting the degree to which pairs of variables are linearly related. The shades of blue and red represent negative and positive correlations, respectively, with darker colors indicating stronger relationships. The size of the circles also correlates with the strength of the relationship—the larger the circle, the stronger the correlation. Variables that are highly correlated might influence each other or share a common cause, whereas variables with little to no correlation have no linear dependency. This type of analysis is crucial in identifying patterns and potential causative factors within the dataset.
+
+```{r,warning=FALSE,fig.align='center'}
+# Create a ggplot2 object
+smooth_scatter_plot <- ggplot(merged_data, aes(x = WindkmhInt, y = Precmm)) +
+  geom_point(alpha = 0.6, size = 3) + 
+  geom_smooth(method = "loess", se = FALSE, color = "blue") +  
+  labs(title = "Scatter plot of Wind Speed vs. Precipitation",
+       x = "Wind Speed (km/h)",
+       y = "Precipitation (mm)") +
+  theme_minimal(base_size = 14)
+
+# Print the plot
+smooth_scatter_plot
+
+```
+The scatter plot with a smoothing line presents the relationship between wind speed (in km/h) and precipitation (in mm). Individual data points are plotted as black dots, showing the actual observations. The blue line represents a smoothed trend, highlighting the overall relationship between the two variables. The trend suggests that as wind speed changes, the precipitation also shows some variation. This visual aid is useful for identifying potential patterns or trends that may not be immediately apparent from the raw scatter of points alone.
+
+```{r,warning=FALSE,fig.align='center'}
+# Add a new column 'newdate' combining 'date' and "-01"
+merged_data$newdate <- paste(merged_data$date, "-01", sep = "")
+
+# Convert 'newdate' column to Date type
+merged_data$newdate <- as.Date(merged_data$newdate, format = "%Y-%m-%d")
+
+# Create a time series plot of weather variables
+time_series_all <- ggplot(merged_data, aes(x = newdate)) +
+  geom_line(aes(y = TemperatureCAvg, color = "TemperatureCAvg")) +
+  geom_line(aes(y = TemperatureCMax, color = "TemperatureCMax")) +
+  geom_line(aes(y = TemperatureCMin, color = "TemperatureCMin")) +
+  geom_line(aes(y = Precmm, color = "Precmm")) +
+  geom_line(aes(y = TdAvgC, color = "TdAvgC")) +
+  geom_line(aes(y = HrAvg, color = "HrAvg")) +
+  labs(title = "Time Series Plot of Weather Variables",
+       x = "Date", y = "Value", color = "Variable") +
+  scale_color_manual(values = c("TemperatureCAvg" = "blue", "TemperatureCMax" = "red", "TemperatureCMin" = "green", "Precmm" = "orange", "TdAvgC" = "purple", "HrAvg" = "brown")) +
+  theme_minimal()
+
+# Display the time series plot
+print(time_series_all)
+
+```
+The time series plot illustrates the trends of various weather variables over the year 2023. Each line represents a different weather metric, such as average temperature, precipitation, and humidity, plotted against time from January to December. The plot reveals the seasonal patterns of each variable, like temperature peaks and valleys, and how they correlate over time. This visual representation is critical for understanding the temporal dynamics of weather conditions throughout the year.
+
+```{r,warning=FALSE,fig.align='center'}
+# Convert 'category' to factor
+merged_data$category <- factor(merged_data$category)
+
+# Define a vector of 14 distinct colors
+mycolors <- rainbow(14)
+
+# Create a leaflet map
+crime_map <- leaflet(merged_data) %>%
+  addTiles() %>%  # Add default OpenStreetMap tiles
+  addCircleMarkers(
+    lng = ~long,    # Longitude
+    lat = ~lat,     # Latitude
+    color = ~mycolors,  # Color by crime category
+    popup = ~category,  # Popup text
+    radius = 3,         # Marker radius
+    fillOpacity = 0.7   # Marker fill opacity
+  ) %>%
+  addLegend(
+    position = "bottomright",    # Position of the legend
+    colors = mycolors,              # Assign 14 different colors
+    labels = levels(merged_data$category)  # Labels for legend
+  )
+
+# Display the map
+crime_map
+
+```
+The map visualization is a geospatial representation of crime incidents in Colchester, with different colors indicating various types of crimes, such as anti-social behavior, burglary, and violent crime. Each colored dot marks the location where a crime was reported. This type of visualization enables a spatial analysis of crime patterns, helping to identify hotspots and possibly inform strategic decisions for crime prevention and resource allocation. The map is overlaid on a base map that provides context, showing streets, buildings, and natural features, allowing for a comprehensive understanding of the geographical distribution of crime in the area.
+
+
+## Story of Analysed and Visualised data
+
+In Colchester, a town steeped in history yet ever evolving, the people found a unique way to understand themselves: through numbers. They began to record crimes, month by month, noticing how the tides of wrongdoing seemed to rise and fall with the seasons themselves. In spring, as the world turned green and blossoms unfurled, bicycles would vanish from the streets. And in the long, warm stretch of summer days, tempers would flare more than usual, leading to noisy confrontations and disturbances that echoed the relentless sun. This pattern of behaviours charting how petty thefts to serious offenses echoed the rhythm of nature was captured meticulously in a two-way table. It wasn't just an impersonal log; it was a storybook of sorts, telling of deeper, perhaps even primal, rhythms that prompted people to act out in various ways.From this starting point, the narrative deepened as the townsfolk turned to an interactive bar plot. Here was the judicial response to each crime laid bare in colours, each hue representing a different fate for those who stepped out of line. Some would face the sombre process of court, others found their deeds met with local solutions, while yet others seemed to vanish into a maze of bureaucracy. The diversity of colours spoke volumes about Colchester's commitment to balancing the scales of justice.As the days warmed, the townspeople noticed that not only did flowers bloom, but so did certain crimes. They crafted a density plot, a kind of heatmap that showed that on days of moderate warmth, criminal acts seemed to cluster. It raised questions: Was there something about the comfortable embrace of a warm day that loosened the moral fabric of the town? 
+
+Diving further into the data, the townsfolk created an interactive histogram. Now they could see the varied endings of each criminal tale—how many were caught, how many evaded, and how justice was meted out. It was a visual orchestra, with each crime type its own instrument, contributing to the symphony of community order.The violin plots then added a layer of nuance, revealing the frequency of crimes at various temperatures. These plots, with their wide middles and tapered ends, told a nuanced tale of when misdeeds were most likely to occur a guideline for when to be most vigilant.One particular crime, burglary, was given its spotlight in a single violin plot. The data painted a clear picture of the opportune moments for this crime, suggesting times when the community should lock their doors tighter and watch with keener eyes.Rain, too, had its chapter in the story. In a scatter plot, the townspeople could see whether rain was a deterrent to crime or perhaps an unwitting accomplice. The dots laid out a narrative that was not straightforward but complex, with some taking advantage of the cloak of a downpour while others stayed their hand.The correlation analysis plot brought an intricate web of relationships into view. It was as though they had uncovered a map of the hidden forces at play, seeing how various elements of weather interlinked with human choices.They then smoothed the path through this complex terrain with a scatter plot that incorporated smoothing lines, illustrating how the gusting wind and falling rain might quietly influence the ebbs and flows of criminal acts.
+
+Over the year, as they plotted the time series of weather against crime, they saw how the natural ebb and flow of the seasons—the cold retreat and the warm advance—had its echo in the happenings on the streets.The culminating chapter was the map visualization, where the story of each crime was anchored to a specific corner, street, or square in Colchester. The colorful dots scattered across the map were not just points of data but snapshots of moments, decisions, and the lives that were affected. It called out for understanding, for action, and for strategies that could perhaps change the future narrative.
+
+
+## Conclusion.
+
+Colchester's story, as told through data, reveals a town rhythmically aligned with the natural cycle of seasons. Our data visualization journey highlights the profound connection between the climate's whims and the patterns of crime. From the sprouting of spring to the chill of winter, each season plays its part in the tapestry of local life. This report not only maps out a year of crime but also opens doors to proactive measures and community awareness. Let this be a stepping stone towards a safer Colchester, where data empowers us to understand and protect the heartbeat of our town.
+
+## References.
+
+1. Wickham, H., François, R., Henry, L., & Müller, K. (2021). dplyr: A Grammar of Data Manipulation. R package version 1.0.7. https://CRAN.R-project.org/package=dplyr
+
+2. Wei, T., & Simko, V. (2021). R package "corrplot": Visualization of a Correlation Matrix (Version 0.90). https://CRAN.R-project.org/package=corrplot
+
+3. Wickham, H. (2016). ggplot2: Elegant Graphics for Data Analysis. Springer-Verlag New York. ISBN 978-3-319-24277-4, https://ggplot2.tidyverse.org.
+
+
+
+
+
